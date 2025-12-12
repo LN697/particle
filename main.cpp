@@ -1,57 +1,62 @@
 #include "kinematics.hpp"
 #include "renderer.hpp"
+#include "common.hpp"
 #include <iostream>
-#include <csignal>
-#include <vector> // Add this include for std::vector
+#include <vector>
 
-volatile std::sig_atomic_t g_signal_received = 0;
-void signal_handler(int signal) { g_signal_received = signal; }
-
-// Function to render particles
-void render(Renderer& renderer, const ParticleSystem& particles, int screenWidth, int screenHeight, float boxWidth, float boxHeight) {
-    std::vector<uint32_t> buffer(screenWidth * screenHeight, 0xFF000000); // Black background
+// Helper to fill buffer from particles
+void updateBuffer(std::vector<uint32_t>& buffer, const ParticleSystem& particles, int screenWidth, int screenHeight, float boxWidth, float boxHeight) {
+    std::fill(buffer.begin(), buffer.end(), 0xFF000000); // Clear screen
 
     for (size_t i = 0; i < particles.posX.size(); ++i) {
-        // Map particle coordinates to screen coordinates
         int pixelX = static_cast<int>((particles.posX[i] / boxWidth) * screenWidth);
         int pixelY = static_cast<int>((particles.posY[i] / boxHeight) * screenHeight);
 
-        // Ensure pixel coordinates are within bounds
         if (pixelX >= 0 && pixelX < screenWidth && pixelY >= 0 && pixelY < screenHeight) {
-            buffer[pixelY * screenWidth + pixelX] = 0xFFFFFFFF; // White particle
+            // Simple color based on velocity magnitude
+            float v = std::abs(particles.velX[i]) + std::abs(particles.velY[i]);
+            uint8_t r = std::min(255, static_cast<int>(v * 5));
+            uint8_t g = std::min(255, static_cast<int>(100 + v * 2));
+            uint8_t b = 255;
+            
+            uint32_t color = (0xFF << 24) | (r << 16) | (g << 8) | b;
+            buffer[pixelY * screenWidth + pixelX] = color;
         }
     }
-    renderer.draw(buffer);
 }
 
-int main(int argc, char* argv[]) {
+int main(int, char**) {
     const int screenWidth = 256;
     const int screenHeight = 256;
-    const float simulationBoxWidth = 100.0f; // Assuming these values from kinematics.hpp
-    const float simulationBoxHeight = 100.0f; // Assuming these values from kinematics.hpp
+    
+    // Initialize Config
+    SimConfig config;
+    config.particleCount = 1000;
 
     Renderer renderer;
-    if (!renderer.init("Particle Simulation", screenWidth, screenHeight, 2)) {
-        std::cerr << "[Error] Failed to initialize the renderer." << std::endl;
+    if (!renderer.init("Particle Physics Simulator", screenWidth, screenHeight, 3)) {
+        std::cerr << "[Error] Failed to initialize renderer." << std::endl;
         return -1;
     }
 
     ParticleSystem particles;
     ParticleKinematics kinematics(particles);
 
-    kinematics.init(100);
+    kinematics.init(config);
 
-    // Initial render before simulation steps
-    render(renderer, particles, screenWidth, screenHeight, simulationBoxWidth, simulationBoxHeight);
+    std::vector<uint32_t> buffer(screenWidth * screenHeight);
 
+    // Main Loop
+    while (true) {
+        // Handle input (including ImGui)
+        if (!renderer.handleEvents(config)) break;
 
-    std::signal(SIGINT, signal_handler);
+        // Physics Step
+        kinematics.step(config, 0.016f); // Assume 60hz for now
 
-    while (g_signal_received == 0) {
-        if (!renderer.handleEvents()) break;
-
-        kinematics.step(); // Move the step inside the loop for continuous simulation
-        render(renderer, particles, screenWidth, screenHeight, simulationBoxWidth, simulationBoxHeight);
+        // Render
+        updateBuffer(buffer, particles, screenWidth, screenHeight, 100.0f, 100.0f);
+        renderer.render(buffer, config);
     }
 
     return 0;

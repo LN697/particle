@@ -1,18 +1,37 @@
-# Modular Makefile: auto-detect modules, include dirs and sources
+# Modular Makefile with ImGui Support
 
 CXX := g++
 STD := -std=c++17
-CXXFLAGS := -Wall -Wextra -O3 $(STD)
-LDLIBS := -lSDL2
+CXXFLAGS := -Wall -Wextra -O3 $(STD) `sdl2-config --cflags`
 
-# find all include directories (any folder named "include")
+# Important: We assume ImGui is located in ./vendor/imgui
+# You must download Dear ImGui and put it there, or update this path.
+IMGUI_DIR := vendor/imgui
+IMGUI_BACKENDS := $(IMGUI_DIR)/backends
+
+# Include directories
 INC_DIRS := $(shell find . -type d -name include 2>/dev/null | sed 's|^./||')
+INC_DIRS += $(IMGUI_DIR) $(IMGUI_BACKENDS)
+
 CPPFLAGS := $(patsubst %,-I%,$(INC_DIRS))
 
-# collect all .cpp sources (skip build dir and tests/testbench.cpp to avoid duplicate mains)
-SRCS := $(shell find . -name '*.cpp' ! -path './build/*' ! -path './tests/*' -print | sed 's|^./||')
+# Libraries
+LDLIBS := `sdl2-config --libs` -lGL -ldl
 
-# place objects under build/ preserving directory structure
+# Sources
+# 1. Standard project sources
+SRCS := $(shell find . -name '*.cpp' ! -path './build/*' ! -path './vendor/*' -print | sed 's|^./||')
+
+# 2. ImGui sources (Core + Backends)
+# Only add these if the directory exists to prevent find errors if you haven't added them yet
+ifneq (,$(wildcard $(IMGUI_DIR)/imgui.cpp))
+    IMGUI_SRCS := $(IMGUI_DIR)/imgui.cpp $(IMGUI_DIR)/imgui_demo.cpp $(IMGUI_DIR)/imgui_draw.cpp \
+                  $(IMGUI_DIR)/imgui_tables.cpp $(IMGUI_DIR)/imgui_widgets.cpp \
+                  $(IMGUI_BACKENDS)/imgui_impl_sdl2.cpp $(IMGUI_BACKENDS)/imgui_impl_sdlrenderer2.cpp
+    SRCS += $(IMGUI_SRCS)
+endif
+
+# Objects
 OBJS := $(patsubst %.cpp,build/%.o,$(SRCS))
 
 TARGET := sim
@@ -23,21 +42,17 @@ all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	@echo Linking $@
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDLIBS)
 
-# generic rule: compile source -> object under build/
-# ensures directory exists before compiling
 build/%.o: %.cpp
 	@mkdir -p $(dir $@)
 	@echo Compiling $<
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
 show:
-	@echo "Include dirs: $(INC_DIRS)"
+	@echo "Includes: $(INC_DIRS)"
 	@echo "Sources: $(SRCS)"
-	@echo "Objects: $(OBJS)"
 
 clean:
-	@echo Cleaning build artifacts
 	@rm -rf build/ $(TARGET)
-	

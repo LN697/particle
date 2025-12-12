@@ -1,3 +1,5 @@
 *.o
 build/
 sim
+vendor/
+imgui.ini

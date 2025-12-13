@@ -25,6 +25,10 @@ class Renderer {
         SDL_Renderer* renderer = nullptr;
         SDL_Texture* texture = nullptr;
         
+        // Track dimensions to avoid hardcoding
+        int renderWidth = 0;
+        int renderHeight = 0;
+        
         // UI State
         bool showUI = true;
 };
